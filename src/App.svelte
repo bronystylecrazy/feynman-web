@@ -38,9 +38,14 @@
     researchTools,
     automaticTitle,
   } from './lib/presentation';
-  import ToolActivity from './components/ToolActivity.svelte';
+  import ThinkingActivity from './components/ThinkingActivity.svelte';
   import Modal from './components/Modal.svelte';
   import ModelPicker from './components/ModelPicker.svelte';
+  import ChatOptions from './components/ChatOptions.svelte';
+  import CommandSuggestions from './components/CommandSuggestions.svelte';
+  import { commandText, matchCommands } from './lib/commands';
+  import { commandIcon } from './lib/command-icons';
+  import { chatAppearance, type ChatAppearance } from './lib/chat-options';
   import ArtifactPanel from './components/ArtifactPanel.svelte';
   import { api, reduceStream, sessionInput, streamMessage } from './lib/api';
   import { sampleResearch } from './lib/sample';
@@ -75,14 +80,28 @@
   let search = $state('');
   let projectId = $state('');
   let modal = $state<
-    'settings' | 'models' | 'commands' | 'project' | undefined
+    'settings' | 'models' | 'commands' | 'project' | 'rename' | undefined
   >();
   let commands = $state<Command[]>([]);
   let commandQuery = $state('');
+  let commandsLoading = $state(false);
+  let loadedCommandSession = '';
+  let slashIndex = $state(0);
+  let slashDismissed = $state(false);
+  let commandRevision = $state(0);
+  let commandAttempt = $state('');
+  let renameTitle = $state('');
+  let appearance = $state<ChatAppearance>(chatAppearance(undefined));
+  let appearanceReady = $state(false);
+  let navigationReady = $state(false);
+  let slashCommands = $derived(matchCommands(commands, draft).slice(0, 8));
   let projectName = $state('');
   let defaultModel = $state('');
   let copiedId = $state('');
   let revealMessageId = $state('');
+  let activeAssistantId = $derived(
+    active?.messages.findLast((message) => message.role === 'assistant')?.id,
+  );
   let light = $state(false);
   let streamAbort: AbortController | undefined;
   let composer: HTMLTextAreaElement;
@@ -116,6 +135,23 @@
   let working = $derived(
     busy || active?.status === 'running' || active?.status === 'queued',
   );
+  let showSlash = $derived(
+    !modal && !working && !slashDismissed && /^\/[^\s]*$/.test(draft),
+  );
+  $effect(() => {
+    const attempt = `${active?.id ?? 'new'}:${commandRevision}`;
+    if (
+      showSlash &&
+      connected &&
+      !working &&
+      !actionBusy &&
+      !commandsLoading &&
+      commandAttempt !== attempt
+    ) {
+      commandAttempt = attempt;
+      void loadCommands();
+    }
+  });
 
   function savePreference(key: string, value: string) {
     try {
@@ -192,18 +228,53 @@
     defaultModel = readPreference('feynman.default-model');
     light = readPreference('feynman.theme') === 'light';
     sidebar = window.innerWidth >= 900;
-    void refresh();
+    try {
+      appearance = chatAppearance(
+        JSON.parse(readPreference('feynman.chat-appearance') || '{}'),
+      );
+    } catch {
+      appearance = chatAppearance(undefined);
+    }
+    appearanceReady = true;
+    void refresh().then(async () => {
+      const id = new URL(window.location.href).searchParams.get('session');
+      const session = sessions.find((item) => item.id === id);
+      if (session) await openSession(session);
+      navigationReady = true;
+    });
+    const outsideComposer = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !composer?.closest('.composer-area')?.contains(event.target)
+      )
+        slashDismissed = true;
+    };
+    window.addEventListener('pointerdown', outsideComposer);
     const keydown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
         event.preventDefault();
-        if (!working) void showCommands();
+        if (!working && !actionBusy && !modal) void showCommands();
       }
     };
     window.addEventListener('keydown', keydown);
     return () => {
       window.removeEventListener('keydown', keydown);
+      window.removeEventListener('pointerdown', outsideComposer);
       streamAbort?.abort();
     };
+  });
+  $effect(() => {
+    if (navigationReady) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('token');
+      if (active?.id) url.searchParams.set('session', active.id);
+      else url.searchParams.delete('session');
+      window.history.replaceState(null, '', url);
+    }
+  });
+  $effect(() => {
+    if (appearanceReady)
+      savePreference('feynman.chat-appearance', JSON.stringify(appearance));
   });
   $effect(() => {
     const content = active?.messages.at(-1)?.content;
@@ -267,7 +338,7 @@
     upsert(session);
     example = false;
     following = true;
-    commands = [];
+    loadedCommandSession = '';
     return session;
   }
   async function startNew() {
@@ -299,7 +370,7 @@
       ).session;
       upsert(active);
       example = false;
-      commands = [];
+      loadedCommandSession = '';
       following = true;
       if (window.innerWidth < 900) sidebar = false;
       await tick();
@@ -392,23 +463,102 @@
       actionBusy = false;
     }
   }
-  async function showCommands() {
-    modal = 'commands';
-    commandQuery = '';
-    error = '';
-    if (!connected) return;
+  async function loadCommands() {
+    if (
+      !connected ||
+      working ||
+      actionBusy ||
+      commandsLoading ||
+      (active && loadedCommandSession === active.id)
+    )
+      return;
+    commandsLoading = true;
     actionBusy = true;
     try {
       const session = active ?? (await newSession());
-      if (session)
-        commands = (
-          await api<{ commands: Command[] }>(
-            '/api/chat/commands',
-            sessionInput(session),
-          )
-        ).commands;
+      if (!session) return;
+      const result = await api<{ commands: Command[] }>(
+        '/api/chat/commands',
+        sessionInput(session),
+      );
+      if (active?.id === session.id) {
+        commands = result.commands;
+        loadedCommandSession = session.id;
+        slashIndex = 0;
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Could not load commands.';
+    } finally {
+      commandsLoading = false;
+      actionBusy = false;
+    }
+  }
+  async function showCommands() {
+    if (working || actionBusy || (modal && modal !== 'commands')) return;
+    modal = 'commands';
+    commandQuery = '';
+    error = '';
+    await loadCommands();
+  }
+  function insertCommand(command: Command) {
+    draft = commandText(command) + ' ';
+    modal = undefined;
+    slashDismissed = true;
+    void tick().then(() => {
+      composer?.focus();
+      composer?.setSelectionRange(draft.length, draft.length);
+    });
+  }
+  function composerKey(event: KeyboardEvent) {
+    if (event.isComposing) return;
+    if (showSlash) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        slashDismissed = true;
+        return;
+      }
+      if (
+        (event.key === 'ArrowDown' || event.key === 'ArrowUp') &&
+        slashCommands.length
+      ) {
+        event.preventDefault();
+        slashIndex =
+          (slashIndex +
+            (event.key === 'ArrowDown' ? 1 : -1) +
+            slashCommands.length) %
+          slashCommands.length;
+        return;
+      }
+      if (
+        (event.key === 'Enter' || event.key === 'Tab') &&
+        !event.shiftKey &&
+        slashCommands.length
+      ) {
+        event.preventDefault();
+        insertCommand(slashCommands[slashIndex] ?? slashCommands[0]);
+        return;
+      }
+    }
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      void send();
+    }
+  }
+  async function renameSession() {
+    if (!active || working || actionBusy || !renameTitle.trim()) return;
+    actionBusy = true;
+    error = '';
+    try {
+      active = (
+        await api<{ session: Session }>('/api/chat/session', {
+          ...sessionInput(active),
+          title: renameTitle.trim(),
+        })
+      ).session;
+      upsert(active);
+      modal = undefined;
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Could not rename chat.';
     } finally {
       actionBusy = false;
     }
@@ -495,7 +645,14 @@
       : 'Feynman — Research workspace'}</title
   ></svelte:head
 >
-<div class="app" class:light class:has-panel={rightPanel}>
+<div
+  class="app"
+  data-chat-font={appearance.font}
+  class:chat-small={appearance.small}
+  class:chat-wide={appearance.wide}
+  class:light
+  class:has-panel={rightPanel}
+>
   {#if sidebar}
     <aside
       transition:fly={{ x: -16, duration: motion(180) }}
@@ -632,7 +789,15 @@
             : connected
               ? 'Connected'
               : 'Connect Feynman'}</button
-        ><span class="topbar-separator"></span><button
+        ><span class="topbar-separator"></span><ChatOptions
+          session={active}
+          bind:appearance
+          busy={working || actionBusy}
+          onrename={() => {
+            renameTitle = active ? automaticTitle(active) : '';
+            modal = 'rename';
+          }}
+        /><button
           class="icon-button"
           class:active={rightPanel}
           onclick={() => {
@@ -735,7 +900,14 @@
                         >{message.status}</span
                       >{/if}
                   </div>
-                  <ToolActivity tools={researchTools(message)} />
+                  <ThinkingActivity
+                    tools={researchTools(message)}
+                    status={message.id === activeAssistantId &&
+                    (active.status === 'running' || active.status === 'queued')
+                      ? active.status
+                      : message.status}
+                    hasAnswer={Boolean(answerText(message))}
+                  />
                 {/if}
                 {#if message.role === 'user'}
                   <div class="user-content">{message.content}</div>
@@ -754,12 +926,6 @@
                         });
                     }}
                   />
-                {:else if !researchTools(message).length && (message.status === 'running' || message.status === 'queued')}
-                  <div class="pending-response" role="status">
-                    <span class="thinking-orbit" aria-hidden="true"></span><span
-                      class="thinking-label">Thinking…</span
-                    >
-                  </div>
                 {/if}
                 {#if message.role === 'assistant' && answerText(message) && message.status !== 'running' && message.status !== 'queued'}
                   <div class="message-actions">
@@ -780,6 +946,13 @@
       {/if}
     </div>
     <div class="composer-area">
+      {#if showSlash}<CommandSuggestions
+          commands={slashCommands}
+          selected={slashIndex}
+          loading={commandsLoading}
+          {connected}
+          onselect={insertCommand}
+        />{/if}
       {#if !following && active?.messages.length}<button
           class="jump-button secondary"
           onclick={() => {
@@ -803,12 +976,18 @@
           aria-label="Research message"
           rows="2"
           disabled={working}
-          onkeydown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-              e.preventDefault();
-              void send();
-            }
-          }}></textarea>
+          aria-autocomplete="list"
+          aria-controls={showSlash ? 'composer-command-menu' : undefined}
+          aria-activedescendant={showSlash && slashCommands.length
+            ? `composer-command-${slashIndex}`
+            : undefined}
+          oninput={(event) => {
+            draft = event.currentTarget.value;
+            slashDismissed = false;
+            slashIndex = 0;
+            if (/^\/[^\s]*$/.test(draft)) commandRevision++;
+          }}
+          onkeydown={composerKey}></textarea>
         <div class="composer-toolbar">
           <div class="inline">
             <button
@@ -928,24 +1107,28 @@
           aria-label="Search commands"
         /></label
       >
-      {#if actionBusy}<p class="muted inline">
+      {#if commandsLoading}<p class="muted inline">
           <LoaderCircle size={15} class="spin" /> Loading commands from Pi…
         </p>{:else if !connected}<p class="muted">
           Connect Feynman to discover the commands available in your
           installation.
         </p>{:else}<div class="command-list">
-          {#each filteredCommands as command}<button
-              onclick={() => {
-                draft = (command.command || `/${command.name}`) + ' ';
-                modal = undefined;
-                composer?.focus();
-              }}
-              ><strong>{command.command || `/${command.name}`}</strong><span
-                >{command.description ||
-                  command.source ||
-                  'Feynman command'}</span
+          {#each filteredCommands as command}
+            {@const Icon = commandIcon(command)}
+            <button
+              class="command-modal-row"
+              onclick={() => insertCommand(command)}
+              ><span class="command-modal-icon"
+                ><Icon size={19} strokeWidth={1.6} /></span
+              ><span class="command-modal-copy"
+                ><strong>{commandText(command)}</strong><span
+                  >{command.description ||
+                    command.source ||
+                    'Feynman command'}</span
+                ></span
               ></button
-            >{/each}{#if !filteredCommands.length}<p class="muted">
+            >
+          {/each}{#if !filteredCommands.length}<p class="muted">
               No matching commands were returned.
             </p>{/if}
         </div>{/if}
@@ -971,6 +1154,28 @@
         ><button
           class="primary full"
           disabled={!projectName.trim() || actionBusy}>Create project</button
+        >{#if error}<p class="error-message" role="alert">{error}</p>{/if}
+      </form></Modal
+    >{/if}
+  {#if modal === 'rename'}<Modal
+      title="Rename chat"
+      busy={actionBusy}
+      onclose={() => (modal = undefined)}
+      ><form
+        onsubmit={(event) => {
+          event.preventDefault();
+          void renameSession();
+        }}
+      >
+        <label
+          >Chat title<input
+            required
+            maxlength="120"
+            bind:value={renameTitle}
+          /></label
+        ><button
+          class="primary full"
+          disabled={actionBusy || !renameTitle.trim()}>Save title</button
         >{#if error}<p class="error-message" role="alert">{error}</p>{/if}
       </form></Modal
     >{/if}

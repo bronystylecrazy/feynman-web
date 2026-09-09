@@ -54,7 +54,9 @@ Both servers bind to loopback. This is a local companion application; hosted or 
 - Side-by-side artifact browsing with source/preview switching, downloads, images, PDFs, text/code, and notebook Markdown cells.
 - Live model catalog, searchable selection, and an optional default for new chats in this browser.
 - Custom OpenAI-compatible provider configuration and endpoint/model-list checks.
-- Keyboard-friendly dialogs, Enter to send, Shift+Enter for a newline, and Cmd/Ctrl+K for commands exposed by Pi.
+- Fast inline `/` command suggestions with Lucide icons, local filtering, and ↑/↓, Enter, Tab, and Escape controls. The catalog is fetched from Pi on first use and reused while typing. Cmd/Ctrl+K opens the full command picker.
+- A chat-options menu with Default/Serif/Mono fonts, small text, full width, rename, copy link/conversation, and Markdown/JSON export. Reading preferences persist locally; renamed titles persist in Feynman.
+- Keyboard-friendly dialogs, Enter to send, and Shift+Enter for a newline.
 - Dark/light themes, Lucide Svelte icons, panel/message/dialog transitions, and reduced-motion support.
 
 ## Model selection and custom endpoints
@@ -84,7 +86,7 @@ Svelte frontend
       → Feynman's shared Pi runtime, sessions, tools, skills, and subagents
 ```
 
-The bridge uses a fixed server-configured backend and forwards its token server-side. `.env.local` is ignored by Git; never put credentials into `VITE_*` variables. Provider keys are sent only to the local bridge and selected endpoint, and model configuration files are written atomically with user-only permissions. Browser storage contains only theme and model-ID preferences.
+The bridge uses a fixed server-configured backend and forwards its token server-side. `.env.local` is ignored by Git; never put credentials into `VITE_*` variables. Provider keys are sent only to the local bridge and selected endpoint, and model configuration files are written atomically with user-only permissions. Browser storage contains only theme, reading-appearance, and model-ID preferences. Session links contain a local session ID and never the backend token.
 
 Each ordinary chat request describes the native Markdown/math/Mermaid renderer through Feynman’s existing preview metadata and asks it to avoid generating images just to display equations. The original user message stays unchanged. Feynman bypasses preview context for raw slash commands. Intentional workspace image references are resolved through its authenticated file API, including document-relative references.
 
@@ -105,7 +107,7 @@ This is the first functional frontend slice, not complete Feynman workbench pari
 - Steering, branching, and full process-restart session resumption. Reopening and continuing sessions on a running backend are exercised.
 - Dedicated thinking/reasoning controls and custom provider API formats beyond OpenAI Chat Completions.
 
-Tool and subagent details are shown when exposed through Feynman's tool events. The UI does not claim every Pi interaction is browser-compatible.
+The thinking animation indicates a running turn; the expandable panel shows actual tool activity, not invented reasoning text. The tested backend omits model reasoning text from its web stream. Tool and subagent details are shown when exposed through Feynman's tool events. The UI does not claim every Pi interaction is browser-compatible.
 
 ## Validation
 

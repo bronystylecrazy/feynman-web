@@ -46,3 +46,12 @@ Extension dialogs, full paper compilation, notebook execution, uploads/edits/ann
 - Startup: replace the generic runtime row, startup prose, repeated running label, and bottom loading indicator with one quiet thinking state.
 - Streaming: adaptively reveal cumulative bursts with requestAnimationFrame, preserve complete math expressions, honor reduced motion, and display history immediately.
 - Titles: derive first-question titles without another model request; persist via the existing session API and backfill completed generic sessions.
+
+## Thinking and chat controls follow-up
+
+- Added an animated thinking mark, shimmer, and orbiting dots; real tool activity expands with a short transition and collapses after completion. The backend does not expose model reasoning text, so no thought text is fabricated. Reduced motion disables the animation.
+- Added inline slash autocomplete, command-specific Lucide icons, cached local filtering, arrow/Enter/Tab/Escape navigation, and the full command picker. Ordinary composer focus does not block on command discovery.
+- Added chat appearance controls, local persistence, safe session links and restoration, rename, clipboard actions, and Markdown/JSON download. Only supported chat actions appear in the menu.
+- Verification: 21 unit/integration tests; 12 browser scenarios, including early slash input during session restoration. Live backend returned 158 commands; live autocomplete displayed suggestions without sending a model prompt.
+- Review reconciliation: fixed shared action-lock interference and removed automatic command discovery on ordinary text focus; fixed early input losing its lookup before session restoration.
+- Complete: lint, typecheck, tests, browser verification, and production build. Git history records delivery.

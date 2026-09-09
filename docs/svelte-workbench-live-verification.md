@@ -37,3 +37,7 @@ The Svelte frontend passes 18 unit/integration tests and eight Chromium browser 
 Both the development and production Node servers connected successfully to the user-provided Feynman 0.3.48 backend, with 17 configured models exposed in the picker and no browser errors. No live-provider model prompt was sent by this verification. The provided access token is stored only in the ignored local environment file.
 
 `npm run check`, `npm run lint`, `npm test`, `npm run test:browser`, and `npm run build` pass. Vite reports a non-blocking large-chunk advisory for renderer dependencies; Mermaid is loaded on demand. Full Feynman feature parity remains outside this release.
+
+## Chat controls follow-up
+
+The updated suite has 21 unit/integration tests and 12 browser scenarios. New checks cover active/completed thinking transitions, reduced motion, collapsible actual tool results, slash autocomplete and cached keyboard insertion, first-use lookup after session restoration, chat typography/width persistence, copy/export, rename, and token-free session links. The real Feynman backend returned 158 commands; the UI displayed live filtered suggestions with zero model prompts.

@@ -1541,60 +1541,41 @@ a.nav-row {
   background: none;
 }
 
-.pending-response {
+/* Chat-only reading preferences preserve UI, code, and mathematical typography. */
+.app[data-chat-font='serif'] .message-body .prose,
+.app[data-chat-font='serif'] .user-content {
+  font-family: Georgia, 'Times New Roman', serif;
+}
+.app[data-chat-font='mono'] .message-body .prose,
+.app[data-chat-font='mono'] .user-content {
+  font-family: 'IBM Plex Mono', monospace;
+}
+.app.chat-small .message-body .prose,
+.app.chat-small .user-content {
+  font-size: 12px;
+}
+.app.chat-wide .transcript,
+.app.chat-wide .composer-area {
+  width: 100%;
+  max-width: none;
+}
+.command-list .command-modal-row {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 5px 0 15px;
-  min-height: 40px;
-  font-size: 13px;
-  color: var(--muted);
+  gap: 12px;
 }
-.thinking-orbit {
-  width: 13px;
-  height: 13px;
-  border: 1.5px solid var(--accent);
-  border-radius: 50%;
-  animation: thinking-breathe 1.8s ease-in-out infinite;
+.command-list .command-modal-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  margin: 0;
 }
-.thinking-label {
-  background: linear-gradient(
-    100deg,
-    var(--muted) 30%,
-    var(--text) 50%,
-    var(--muted) 70%
-  );
-  background-size: 230% 100%;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: thinking-shimmer 2.5s linear infinite;
-}
-@keyframes thinking-breathe {
-  0%,
-  100% {
-    opacity: 0.35;
-    transform: scale(0.75);
-  }
-  50% {
-    opacity: 0.9;
-    transform: scale(1);
-  }
-}
-@keyframes thinking-shimmer {
-  from {
-    background-position: 160% 0;
-  }
-  to {
-    background-position: -70% 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .thinking-orbit,
-  .thinking-label {
-    animation: none;
-  }
-  .thinking-label {
-    background: none;
-    -webkit-text-fill-color: currentColor;
-  }
+.command-list .command-modal-copy {
+  margin: 0;
 }
