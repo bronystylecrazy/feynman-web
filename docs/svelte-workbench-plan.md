@@ -11,7 +11,7 @@ Objective: build the separate Feynman Web frontend in Svelte, matching the suppl
 - Verified: read-only connection to the user's running Feynman 0.3.48 server and model catalog. No live-provider prompt was sent.
 - Complete: README setup and explicit parity boundaries.
 - Verified: final formatting, typecheck, build, and review reconciliation. Production server connected to the real local backend with no browser errors.
-- Pending: commit and push.
+- Complete: implementation and verification. Git history records the delivered source revisions.
 
 ## Research scope
 
